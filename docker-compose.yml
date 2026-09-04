@@ -1,0 +1,11 @@
+services:
+  yardsale:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - yardsale-data:/data
+    restart: unless-stopped
+
+volumes:
+  yardsale-data:

@@ -1,0 +1,8 @@
+.git
+.yardsale
+yardsale-data
+node_modules
+npm-debug.log*
+ContainerPlan.md
+README.md
+test
