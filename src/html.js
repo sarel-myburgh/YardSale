@@ -49,7 +49,7 @@ function listingActions(listing, csrf) {
 
 function layout({ title, body, storeName = "YardSale", admin = false, csrf = "" }) {
   const nav = admin
-    ? `<nav class="nav"><a href="/admin">Dashboard</a><a href="/admin/listings">Listings</a><a href="/admin/reservations">Reservations</a><a href="/admin/comments">Comments</a><a href="/admin/store">Store settings</a><form method="post" action="/logout" class="inline-form"><input type="hidden" name="csrf" value="${escapeHtml(csrf)}"><button class="link-button" type="submit">Log out</button></form></nav>`
+    ? `<nav class="nav"><a href="/admin">Dashboard</a><a href="/admin/listings">Listings</a><a href="/admin/reservations">Reservations</a><a href="/admin/comments">Comments</a><a href="/admin/store">Store settings</a><a href="/admin/export">Export / import</a><form method="post" action="/logout" class="inline-form"><input type="hidden" name="csrf" value="${escapeHtml(csrf)}"><button class="link-button" type="submit">Log out</button></form></nav>`
     : `<nav class="nav"><a href="/">Storefront</a><a href="/admin">Seller login</a></nav>`;
 
   return `<!doctype html>
@@ -336,9 +336,19 @@ export function storeSettingsPage({ store, csrf, errors = [], message = "", valu
       <div class="two-column">${field("Hold duration (minutes)", "holdDurationMinutes", String(current.holdDurationMinutes), { type: "number", required: true, help: "Default: 60 minutes while you review a request." })}${field("Reservation duration (minutes)", "reservationDurationMinutes", String(current.reservationDurationMinutes), { type: "number", required: true, help: "Default: 1440 minutes after approval." })}</div>
       ${contactMethodsField(current.contactMethods)}
       <label class="checkbox-field"><input type="checkbox" name="commentsEnabled"${current.commentsEnabled ? " checked" : ""}> <span>Allow comments on listings</span></label>
+      <label class="checkbox-field"><input type="checkbox" name="federationEnabled"${current.federationEnabled ? " checked" : ""}> <span>Allow public marketplace indexing</span></label>
       <button class="button primary" type="submit">Save store settings</button>
     </form>`;
   return adminPage("Store settings", body, current, csrf, message);
+}
+
+export function exportPage({ store, csrf, errors = [], message = "" }) {
+  const body = `<div class="page-heading"><div><div class="eyebrow">Seller area</div><h1>Export / import</h1></div></div>${errorsBlock(errors)}${notice(message)}
+    <div class="two-column">
+      <section class="card form-grid"><div><h2>Download a backup</h2><p class="muted">Includes your store settings, listings, photos, reservations, and comments.</p></div><a class="button primary" href="/admin/export/download">Download export</a></section>
+      <section class="card form-grid"><div><h2>Restore an export</h2><p class="muted">This replaces the current store data but keeps your seller login.</p></div><form method="post" action="/admin/export" class="form-grid" enctype="multipart/form-data"><input type="hidden" name="csrf" value="${escapeHtml(csrf)}"><label class="field"><span>YardSale export</span><input type="file" name="archive" accept=".zip,application/zip" required><small>Choose a YardSale .zip export.</small></label><button class="button primary" type="submit">Import export</button></form></section>
+    </div>`;
+  return adminPage("Export / import", body, store, csrf);
 }
 
 export function adminCommentsPage({ store, comments, csrf, message = "" }) {

@@ -62,9 +62,12 @@ import {
   loginPage,
   reservationsPage,
   reservationPage,
+  exportPage,
   setupPage,
   storeSettingsPage
 } from "./html.js";
+import { federationCacheHeaders, federationFeed, federationManifest, publicOrigin } from "./federation.js";
+import { createStoreExport, importStoreExport } from "./portable.js";
 import {
   CONTACT_METHOD_OPTIONS,
   createSlidingWindowLimiter,
@@ -133,6 +136,20 @@ function sendJson(response, data, status = 200, secure = false) {
   response.setHeader("Content-Type", "application/json; charset=utf-8");
   response.setHeader("Cache-Control", "no-store");
   response.end(JSON.stringify(data));
+}
+
+function sendFederationJson(request, response, payload, secure) {
+  const { body, etag, lastModified } = federationCacheHeaders(payload);
+  const notModified = request.headers["if-none-match"] === etag
+    || (request.headers["if-none-match"] === undefined && Date.parse(request.headers["if-modified-since"] || "") >= Date.parse(lastModified));
+  applySecurityHeaders(response, secure);
+  response.statusCode = notModified ? 304 : 200;
+  response.setHeader("Content-Type", "application/json; charset=utf-8");
+  response.setHeader("Cache-Control", "public, max-age=60");
+  response.setHeader("ETag", etag);
+  response.setHeader("Last-Modified", lastModified);
+  if (!notModified) response.setHeader("Content-Length", Buffer.byteLength(body));
+  response.end(notModified ? undefined : body);
 }
 
 function redirect(response, location, cookies = [], secure = false) {
@@ -285,6 +302,7 @@ function storeValuesFromForm(form, contactResult = contactMethodsFromForm(form))
     holdDurationMinutes: Number(form.holdDurationMinutes ?? 60),
     reservationDurationMinutes: Number(form.reservationDurationMinutes),
     commentsEnabled: form.commentsEnabled === "on",
+    federationEnabled: form.federationEnabled === "on",
     contactMethods: contactResult.methods
   };
 }
@@ -538,6 +556,53 @@ async function handleStoreAdmin(request, response, db, config, session, url) {
   redirect(response, "/admin/store?saved=1", [], secure);
 }
 
+async function handleExportAdmin(request, response, db, config, session, parts, url) {
+  const secure = secureRequest(request, config);
+  const store = getStore(db);
+  const csrf = parseCookies(request.headers.cookie).yardsale_csrf || "";
+
+  if (parts.length === 2 && request.method === "GET") {
+    const message = url.searchParams.get("imported") === "1" ? "Store data imported successfully." : "";
+    sendHtml(response, exportPage({ store, csrf, message }), 200, [], secure);
+    return;
+  }
+
+  if (parts.length === 3 && parts[2] === "download" && request.method === "GET") {
+    const archive = await createStoreExport(db, config.dataDir);
+    applySecurityHeaders(response, secure);
+    response.statusCode = 200;
+    response.setHeader("Content-Type", "application/zip");
+    response.setHeader("Content-Disposition", `attachment; filename="yardsale-export-${new Date().toISOString().slice(0, 10)}.zip"`);
+    response.setHeader("Content-Length", archive.length);
+    response.setHeader("Cache-Control", "no-store");
+    response.end(archive);
+    return;
+  }
+
+  if (parts.length === 2 && request.method === "POST") {
+    const { form, files } = await readRequestForm(request);
+    const errors = [];
+    if (!csrfIsValid(request, session, form)) errors.push("Your session form token was not valid. Refresh the page and try again.");
+    const archive = files.find((file) => file.name === "archive" && file.data.length > 0);
+    if (!archive) errors.push("Choose a YardSale export file.");
+    if (errors.length) {
+      sendHtml(response, exportPage({ store, csrf, errors }), 422, [], secure);
+      return;
+    }
+
+    try {
+      const result = await importStoreExport(db, config.dataDir, archive.data);
+      log("store_imported", { user_id: session.user_id, ...result });
+      redirect(response, "/admin/export?imported=1", [], secure);
+    } catch (error) {
+      sendHtml(response, exportPage({ store, csrf, errors: [error.message || "The export could not be imported."] }), 422, [], secure);
+    }
+    return;
+  }
+
+  sendHtml(response, errorPage("Method not allowed", "That export action is not available.", 405).html, 405, [], secure);
+}
+
 async function handleNewListing(request, response, db, config, session) {
   const secure = secureRequest(request, config);
   const store = getStore(db);
@@ -728,6 +793,11 @@ async function handleAdmin(request, response, db, config, parts, url) {
 
   if (parts[1] === "store") {
     await handleStoreAdmin(request, response, db, config, session, url);
+    return;
+  }
+
+  if (parts[1] === "export") {
+    await handleExportAdmin(request, response, db, config, session, parts, url);
     return;
   }
 
@@ -973,6 +1043,26 @@ async function serveUpload(request, response, config, filename) {
   }
 }
 
+async function handleFederationManifest(request, response, db, config) {
+  const secure = secureRequest(request, config);
+  if (request.method !== "GET") {
+    sendJson(response, { error: "Method not allowed" }, 405, secure);
+    return;
+  }
+  const store = getStore(db);
+  sendFederationJson(request, response, federationManifest(store, publicOrigin(request, secure)), secure);
+}
+
+async function handleFederationFeed(request, response, db, config) {
+  const secure = secureRequest(request, config);
+  if (request.method !== "GET") {
+    sendJson(response, { error: "Method not allowed" }, 405, secure);
+    return;
+  }
+  const store = getStore(db);
+  sendFederationJson(request, response, federationFeed(db, store, publicOrigin(request, secure)), secure);
+}
+
 async function handleRequest(request, response, db, config) {
   const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
   const parts = pathParts(url);
@@ -1020,6 +1110,14 @@ async function handleRequest(request, response, db, config) {
 
   if (url.pathname === "/setup") {
     redirect(response, "/admin", [], secure);
+    return;
+  }
+  if (url.pathname === "/.well-known/yardsale-store.json") {
+    await handleFederationManifest(request, response, db, config);
+    return;
+  }
+  if (url.pathname === "/api/federation/v1/listings") {
+    await handleFederationFeed(request, response, db, config);
     return;
   }
   if (url.pathname === "/login") {

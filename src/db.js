@@ -241,6 +241,11 @@ export function openDatabase(dataDir) {
   db.exec(schema);
   migrateLegacyTables(db);
   setupListingSearch(db);
+  if (isSetupComplete(db)) {
+    if (!getSetting(db, "store.public_id")) setSetting(db, "store.public_id", randomUUID());
+    if (!getSetting(db, "store.updated_at")) setSetting(db, "store.updated_at", nowIso());
+    if (getSetting(db, "store.federation_enabled") === null) setSetting(db, "store.federation_enabled", "false");
+  }
   db.exec(`
     CREATE INDEX IF NOT EXISTS listings_status_idx ON listings(status, published, sort_order);
     CREATE INDEX IF NOT EXISTS listing_images_listing_idx ON listing_images(listing_id, sort_order, id);
@@ -292,6 +297,7 @@ export function getStore(db) {
   }
 
   return {
+    publicId: getSetting(db, "store.public_id", ""),
     name: getSetting(db, "store.name", "YardSale"),
     description: getSetting(db, "store.description", "A temporary storefront for good things finding a new home."),
     location: getSetting(db, "store.location", ""),
@@ -300,6 +306,8 @@ export function getStore(db) {
     holdDurationMinutes: Number(getSetting(db, "store.hold_duration_minutes", "60")) || 60,
     reservationDurationMinutes: Number(getSetting(db, "store.reservation_duration_minutes", "1440")) || 1440,
     commentsEnabled: getSetting(db, "store.comments_enabled", "true") === "true",
+    federationEnabled: getSetting(db, "store.federation_enabled", "false") === "true",
+    updatedAt: getSetting(db, "store.updated_at", "1970-01-01T00:00:00.000Z"),
     contactMethods
   };
 }
@@ -315,6 +323,7 @@ export function createSetup(db, { login, passwordHash, storeName, currency, time
     `).run(login, passwordHash, now);
 
     setSetting(db, "store.name", storeName);
+    setSetting(db, "store.public_id", randomUUID());
     setSetting(db, "store.description", "A temporary storefront for good things finding a new home.");
     setSetting(db, "store.location", "");
     setSetting(db, "store.currency", currency);
@@ -322,6 +331,8 @@ export function createSetup(db, { login, passwordHash, storeName, currency, time
     setSetting(db, "store.hold_duration_minutes", "60");
     setSetting(db, "store.reservation_duration_minutes", "1440");
     setSetting(db, "store.comments_enabled", "true");
+    setSetting(db, "store.federation_enabled", "false");
+    setSetting(db, "store.updated_at", now);
     setSetting(db, "store.contact_methods", "[]");
     setSetting(db, "setup_complete", "true");
 
@@ -347,6 +358,8 @@ export function updateStore(db, values) {
     setSetting(db, "store.hold_duration_minutes", values.holdDurationMinutes);
     setSetting(db, "store.reservation_duration_minutes", values.reservationDurationMinutes);
     setSetting(db, "store.comments_enabled", values.commentsEnabled ? "true" : "false");
+    setSetting(db, "store.federation_enabled", values.federationEnabled ? "true" : "false");
+    setSetting(db, "store.updated_at", nowIso());
     setSetting(db, "store.contact_methods", JSON.stringify(Array.isArray(values.contactMethods) ? values.contactMethods : []));
   });
 }

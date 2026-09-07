@@ -44,7 +44,9 @@ Local data is stored in `.yardsale/`.
 - Seller hold approval/rejection, optional reservation-until time, cancellation, extension, and completion.
 - Basic reservation abuse protection (per-IP and per-listing request windows).
 - Public comments with seller approval, hiding, deletion, plain-text escaping, and basic anti-spam protection.
+- Versioned ZIP export/import with store data, reservations, comments, and listing photos.
+- Optional public federation manifest and listing feed with ETag/Last-Modified caching.
 - Health endpoint and persistent Docker volume.
 
-Optional CAPTCHA, import/export, federation, and image reordering remain
-planned from `ContainerPlan.md`.
+Optional CAPTCHA, structured location fields, managed federation signatures,
+and image reordering remain planned from `ContainerPlan.md`.

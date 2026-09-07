@@ -989,23 +989,23 @@ TODO:
 
 ## Milestone 7 — Export / Import
 
-- [ ] versioned export schema.
-- [ ] JSON export.
-- [ ] media export.
-- [ ] import validation.
-- [ ] restore tests.
+- [x] versioned export schema.
+- [x] JSON export.
+- [x] media export.
+- [x] import validation.
+- [x] restore tests.
 - [ ] migration tests.
 
 ## Milestone 8 — Federation
 
-- [ ] protocol v1.
-- [ ] well-known manifest.
-- [ ] public listing feed.
+- [x] protocol v1.
+- [x] well-known manifest.
+- [x] public listing feed.
 - [ ] structured location payload.
-- [ ] ETag/Last-Modified.
-- [ ] optional indexing flag.
+- [x] ETag/Last-Modified.
+- [x] optional indexing flag.
 - [ ] managed request signatures.
-- [ ] privacy tests.
+- [x] privacy tests.
 
 ## Milestone 9 — Security Hardening
 
@@ -1054,8 +1054,8 @@ TODO:
 - [ ] Buyer contact remains private.
 - [ ] Seller can mark Sold.
 - [ ] Comments can be moderated.
-- [ ] Export/import works.
-- [ ] Federation feed exposes only public fields.
+- [x] Export/import works.
+- [x] Federation feed exposes only public fields.
 - [ ] Security test suite passes.
 - [ ] Idle resource usage is measured and documented.
 
