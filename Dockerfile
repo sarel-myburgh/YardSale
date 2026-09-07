@@ -1,6 +1,10 @@
 FROM node:22-bookworm-slim
 
 ENV NODE_ENV=production
+LABEL org.opencontainers.image.title="YardSale" \
+      org.opencontainers.image.description="A small self-hosted storefront for selling second-hand goods" \
+      org.opencontainers.image.source="https://github.com/sarel-myburgh/YardSale" \
+      org.opencontainers.image.licenses="MIT"
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -12,6 +16,7 @@ RUN mkdir -p /data \
   && chown -R node:node /app /data
 
 USER node
+STOPSIGNAL SIGTERM
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \

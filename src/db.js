@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { randomBytes, randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import { hashToken, nowIso, slugify } from "./utils.js";
+import { hashToken, normalizeStructuredLocation, nowIso, slugify } from "./utils.js";
 
 const schema = `
   PRAGMA foreign_keys = ON;
@@ -245,6 +245,11 @@ export function openDatabase(dataDir) {
     if (!getSetting(db, "store.public_id")) setSetting(db, "store.public_id", randomUUID());
     if (!getSetting(db, "store.updated_at")) setSetting(db, "store.updated_at", nowIso());
     if (getSetting(db, "store.federation_enabled") === null) setSetting(db, "store.federation_enabled", "false");
+    if (getSetting(db, "store.location_structured") === null) {
+      setSetting(db, "store.location_structured", JSON.stringify(normalizeStructuredLocation({
+        displayLocation: getSetting(db, "store.location", "")
+      })));
+    }
   }
   db.exec(`
     CREATE INDEX IF NOT EXISTS listings_status_idx ON listings(status, published, sort_order);
@@ -296,17 +301,30 @@ export function getStore(db) {
     // Keep an older or manually edited store usable.
   }
 
+  const legacyLocation = getSetting(db, "store.location", "");
+  let structuredLocation;
+  try {
+    structuredLocation = normalizeStructuredLocation({
+      ...JSON.parse(getSetting(db, "store.location_structured", "{}")),
+      displayLocation: legacyLocation || undefined
+    });
+  } catch {
+    structuredLocation = normalizeStructuredLocation({ displayLocation: legacyLocation });
+  }
+
   return {
     publicId: getSetting(db, "store.public_id", ""),
     name: getSetting(db, "store.name", "YardSale"),
     description: getSetting(db, "store.description", "A temporary storefront for good things finding a new home."),
-    location: getSetting(db, "store.location", ""),
+    location: structuredLocation.displayLocation,
+    structuredLocation,
     currency: getSetting(db, "store.currency", "USD"),
     timezone: getSetting(db, "store.timezone", "UTC"),
     holdDurationMinutes: Number(getSetting(db, "store.hold_duration_minutes", "60")) || 60,
     reservationDurationMinutes: Number(getSetting(db, "store.reservation_duration_minutes", "1440")) || 1440,
     commentsEnabled: getSetting(db, "store.comments_enabled", "true") === "true",
     federationEnabled: getSetting(db, "store.federation_enabled", "false") === "true",
+    federationControlConfigured: Boolean(getSetting(db, "store.federation_control_secret", "")),
     updatedAt: getSetting(db, "store.updated_at", "1970-01-01T00:00:00.000Z"),
     contactMethods
   };
@@ -326,6 +344,7 @@ export function createSetup(db, { login, passwordHash, storeName, currency, time
     setSetting(db, "store.public_id", randomUUID());
     setSetting(db, "store.description", "A temporary storefront for good things finding a new home.");
     setSetting(db, "store.location", "");
+    setSetting(db, "store.location_structured", JSON.stringify(normalizeStructuredLocation()));
     setSetting(db, "store.currency", currency);
     setSetting(db, "store.timezone", timezone);
     setSetting(db, "store.hold_duration_minutes", "60");
@@ -350,17 +369,37 @@ export function touchUserLogin(db, userId) {
 
 export function updateStore(db, values) {
   return transaction(db, () => {
+    const structuredLocation = normalizeStructuredLocation(values.structuredLocation
+      ? { ...values.structuredLocation, displayLocation: values.location ?? values.structuredLocation.displayLocation }
+      : { displayLocation: values.location });
     setSetting(db, "store.name", values.name);
     setSetting(db, "store.description", values.description);
-    setSetting(db, "store.location", values.location);
+    setSetting(db, "store.location", structuredLocation.displayLocation);
+    setSetting(db, "store.location_structured", JSON.stringify(structuredLocation));
     setSetting(db, "store.currency", values.currency);
     setSetting(db, "store.timezone", values.timezone);
     setSetting(db, "store.hold_duration_minutes", values.holdDurationMinutes);
     setSetting(db, "store.reservation_duration_minutes", values.reservationDurationMinutes);
     setSetting(db, "store.comments_enabled", values.commentsEnabled ? "true" : "false");
     setSetting(db, "store.federation_enabled", values.federationEnabled ? "true" : "false");
+    if (values.clearFederationControlSecret) {
+      setSetting(db, "store.federation_control_secret", "");
+    } else if (String(values.federationControlSecret ?? "").trim()) {
+      setSetting(db, "store.federation_control_secret", String(values.federationControlSecret).trim());
+    }
     setSetting(db, "store.updated_at", nowIso());
     setSetting(db, "store.contact_methods", JSON.stringify(Array.isArray(values.contactMethods) ? values.contactMethods : []));
+  });
+}
+
+export function getFederationControlSecret(db) {
+  return getSetting(db, "store.federation_control_secret", "");
+}
+
+export function setFederationEnabled(db, enabled) {
+  return transaction(db, () => {
+    setSetting(db, "store.federation_enabled", enabled ? "true" : "false");
+    setSetting(db, "store.updated_at", nowIso());
   });
 }
 

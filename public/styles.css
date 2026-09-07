@@ -88,9 +88,10 @@ textarea { resize: vertical; }
 .field small { color: var(--muted); font-weight: 400; font-size: .8rem; }
 .form-divider { height: 1px; margin: 3px 0; background: var(--line); }
 .two-column { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.contact-fieldset { min-width: 0; margin: 3px 0 0; padding: 16px; border: 1px solid var(--line); border-radius: 14px; }
-.contact-fieldset legend { padding: 0 6px; font-weight: 800; }
-.contact-fieldset > p { margin: 0 0 14px; font-size: .88rem; }
+.contact-fieldset, .location-fieldset { min-width: 0; margin: 3px 0 0; padding: 16px; border: 1px solid var(--line); border-radius: 14px; }
+.contact-fieldset legend, .location-fieldset legend { padding: 0 6px; font-weight: 800; }
+.contact-fieldset > p, .location-fieldset > p { margin: 0 0 14px; font-size: .88rem; }
+.location-fieldset { display: grid; gap: 14px; }
 .contact-entry { display: grid; grid-template-columns: minmax(170px, .65fr) minmax(0, 1.35fr); gap: 14px; }
 .contact-entry + .contact-entry { margin-top: 12px; }
 .contact-entry[hidden], [hidden] { display: none !important; }

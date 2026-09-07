@@ -1,0 +1,20 @@
+[Unit]
+Description=YardSale self-hosted storefront
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+Image=ghcr.io/sarel-myburgh/yardsale:1.0.0
+ContainerName=yardsale
+PublishPort=3000:3000
+Volume=yardsale-data:/data:Z
+ReadOnly=true
+Tmpfs=/tmp
+NoNewPrivileges=true
+DropCapability=ALL
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

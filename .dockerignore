@@ -1,6 +1,9 @@
 .git
 .yardsale
 yardsale-data
+backups
+.env
+.env.*
 node_modules
 npm-debug.log*
 ContainerPlan.md

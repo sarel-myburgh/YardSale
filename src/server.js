@@ -14,6 +14,7 @@ import {
   deleteListing,
   expireReservations,
   getActiveReservationForListing,
+  getFederationControlSecret,
   getListingById,
   getListingBySlug,
   getListingImageById,
@@ -31,6 +32,7 @@ import {
   openDatabase,
   reserveListing,
   setListingStatus,
+  setFederationEnabled,
   transaction,
   deleteListingImage,
   updateListing,
@@ -66,12 +68,14 @@ import {
   setupPage,
   storeSettingsPage
 } from "./html.js";
-import { federationCacheHeaders, federationFeed, federationManifest, publicOrigin } from "./federation.js";
+import { federationCacheHeaders, federationFeed, federationManifest, publicOrigin, verifyFederationControlSignature } from "./federation.js";
 import { createStoreExport, importStoreExport } from "./portable.js";
 import {
   CONTACT_METHOD_OPTIONS,
   createSlidingWindowLimiter,
   dateTimeLocalToIso,
+  isValidCoordinate,
+  normalizeStructuredLocation,
   normalizeCurrency,
   nowIso,
   parseMoney,
@@ -84,6 +88,7 @@ const MAX_FORM_BYTES = 128 * 1024;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_IMAGES_PER_LISTING = 10;
 const MAX_MULTIPART_BYTES = MAX_FORM_BYTES + (MAX_IMAGE_BYTES * MAX_IMAGES_PER_LISTING);
+const MAX_FEDERATION_CONTROL_BYTES = 64 * 1024;
 const RESERVATION_RATE_WINDOW_MS = 15 * 60 * 1000;
 const reservationIpLimiter = createSlidingWindowLimiter({ limit: 5, windowMs: RESERVATION_RATE_WINDOW_MS });
 const reservationListingLimiter = createSlidingWindowLimiter({ limit: 3, windowMs: RESERVATION_RATE_WINDOW_MS });
@@ -118,6 +123,9 @@ function applySecurityHeaders(response, secure = false) {
   response.setHeader("X-Frame-Options", "DENY");
   response.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   response.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  response.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+  response.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  response.setHeader("X-Permitted-Cross-Domain-Policies", "none");
   if (secure) response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
 }
 
@@ -288,21 +296,36 @@ function formErrorsForStore(form, contactResult = contactMethodsFromForm(form)) 
   if (!Number.isInteger(holdDuration) || holdDuration < 5 || holdDuration > 43200) errors.push("Hold duration must be between 5 and 43,200 minutes.");
   const reservationDuration = Number(form.reservationDurationMinutes);
   if (!Number.isInteger(reservationDuration) || reservationDuration < 5 || reservationDuration > 43200) errors.push("Reservation duration must be between 5 and 43,200 minutes.");
+  if (!isValidCoordinate(form.latitude, -90, 90)) errors.push("Latitude must be between -90 and 90.");
+  if (!isValidCoordinate(form.longitude, -180, 180)) errors.push("Longitude must be between -180 and 180.");
   errors.push(...contactResult.errors);
   return errors;
 }
 
 function storeValuesFromForm(form, contactResult = contactMethodsFromForm(form)) {
+  const structuredLocation = normalizeStructuredLocation({
+    displayLocation: text(form.location, 200),
+    countryCode: text(form.countryCode, 3),
+    countryName: text(form.countryName, 100),
+    region: text(form.region, 100),
+    city: text(form.city, 100),
+    area: text(form.area, 100),
+    latitude: text(form.latitude, 40),
+    longitude: text(form.longitude, 40)
+  });
   return {
     name: text(form.name, 100),
     description: text(form.description, 3000),
-    location: text(form.location, 200),
+    location: structuredLocation.displayLocation,
+    structuredLocation,
     currency: normalizeCurrency(form.currency) || "USD",
     timezone: timezoneForInput(form.timezone) || "UTC",
     holdDurationMinutes: Number(form.holdDurationMinutes ?? 60),
     reservationDurationMinutes: Number(form.reservationDurationMinutes),
     commentsEnabled: form.commentsEnabled === "on",
     federationEnabled: form.federationEnabled === "on",
+    federationControlSecret: text(form.federationControlSecret, 200),
+    clearFederationControlSecret: form.clearFederationControlSecret === "on",
     contactMethods: contactResult.methods
   };
 }
@@ -346,14 +369,14 @@ function commentRateLimited(request, listingId) {
   return !commentListingLimiter.allow(`${clientKey}:${listingId}`);
 }
 
-function detectImageType(data) {
+export function detectImageType(data) {
   if (data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) return IMAGE_SIGNATURES.jpeg;
   if (data.length >= 8 && data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return IMAGE_SIGNATURES.png;
   if (data.length >= 12 && data.subarray(0, 4).toString("ascii") === "RIFF" && data.subarray(8, 12).toString("ascii") === "WEBP") return IMAGE_SIGNATURES.webp;
   return null;
 }
 
-function validateImageFiles(files, existingCount = 0) {
+export function validateImageFiles(files, existingCount = 0) {
   const imageFiles = files.filter((file) => file.name === "images" && file.filename && file.data.length > 0);
   const errors = [];
   if (existingCount + imageFiles.length > MAX_IMAGES_PER_LISTING) {
@@ -1063,6 +1086,55 @@ async function handleFederationFeed(request, response, db, config) {
   sendFederationJson(request, response, federationFeed(db, store, publicOrigin(request, secure)), secure);
 }
 
+async function handleFederationControl(request, response, db, config) {
+  const secure = secureRequest(request, config);
+  if (request.method !== "POST") {
+    sendJson(response, { error: "Method not allowed" }, 405, secure);
+    return;
+  }
+
+  const secret = getFederationControlSecret(db);
+  if (!secret) {
+    sendJson(response, { error: "Not found" }, 404, secure);
+    return;
+  }
+
+  let bodyBuffer;
+  try {
+    bodyBuffer = await readRequestBuffer(request, MAX_FEDERATION_CONTROL_BYTES);
+  } catch {
+    sendJson(response, { error: "Request body is too large" }, 413, secure);
+    return;
+  }
+  const body = bodyBuffer.toString("utf8");
+  if (!verifyFederationControlSignature(
+    secret,
+    request.headers["x-yardsale-timestamp"],
+    body,
+    request.headers["x-yardsale-signature"]
+  )) {
+    log("federation_control_rejected", { reason: "invalid_signature" });
+    sendJson(response, { error: "Invalid signature" }, 401, secure);
+    return;
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    sendJson(response, { error: "Request body must be valid JSON" }, 400, secure);
+    return;
+  }
+  if (!payload || typeof payload.federation_enabled !== "boolean") {
+    sendJson(response, { error: "federation_enabled must be a boolean" }, 422, secure);
+    return;
+  }
+
+  setFederationEnabled(db, payload.federation_enabled);
+  log("federation_control_updated", { enabled: payload.federation_enabled });
+  sendJson(response, { ok: true, federation_enabled: payload.federation_enabled }, 200, secure);
+}
+
 async function handleRequest(request, response, db, config) {
   const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
   const parts = pathParts(url);
@@ -1114,6 +1186,10 @@ async function handleRequest(request, response, db, config) {
   }
   if (url.pathname === "/.well-known/yardsale-store.json") {
     await handleFederationManifest(request, response, db, config);
+    return;
+  }
+  if (url.pathname === "/api/federation/v1/control") {
+    await handleFederationControl(request, response, db, config);
     return;
   }
   if (url.pathname === "/api/federation/v1/listings") {

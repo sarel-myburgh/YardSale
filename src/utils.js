@@ -42,6 +42,17 @@ export const TIMEZONE_OPTIONS = [
   { city: "UTC", timezone: "UTC", offset: "GMT+0" }
 ];
 
+export const EMPTY_STRUCTURED_LOCATION = Object.freeze({
+  countryCode: "",
+  countryName: "",
+  region: "",
+  city: "",
+  area: "",
+  displayLocation: "",
+  latitude: null,
+  longitude: null
+});
+
 export function escapeHtml(value = "") {
   return String(value ?? "").replace(/[&<>"']/g, (character) => ({
     "&": "&amp;",
@@ -126,6 +137,41 @@ export function timezoneForInput(value) {
 export function timezoneDisplay(value) {
   const option = TIMEZONE_OPTIONS.find((item) => item.timezone === value);
   return option ? `${option.city} (${option.offset})` : String(value ?? "");
+}
+
+function coordinate(value, minimum, maximum) {
+  if (value === "" || value === null || value === undefined) return null;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= minimum && number <= maximum
+    ? Number(number.toFixed(6))
+    : null;
+}
+
+export function isValidCoordinate(value, minimum, maximum) {
+  if (String(value ?? "").trim() === "") return true;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= minimum && number <= maximum;
+}
+
+export function normalizeStructuredLocation(value = {}) {
+  const source = value && typeof value === "object" ? value : {};
+  const countryCode = text(source.countryCode ?? source.country_code, 3).toUpperCase();
+  const countryName = text(source.countryName ?? source.country_name, 100);
+  const region = text(source.region, 100);
+  const city = text(source.city, 100);
+  const area = text(source.area, 100);
+  const parts = [area, city, region, countryName].filter(Boolean);
+  const displayLocation = text(source.displayLocation ?? source.display_location, 200) || parts.join(", ").slice(0, 200);
+  return {
+    countryCode,
+    countryName,
+    region,
+    city,
+    area,
+    displayLocation,
+    latitude: coordinate(source.latitude, -90, 90),
+    longitude: coordinate(source.longitude, -180, 180)
+  };
 }
 
 export function formatDate(value, timezone = "UTC") {

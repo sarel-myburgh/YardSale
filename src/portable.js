@@ -8,7 +8,7 @@ import {
   setSetting,
   transaction
 } from "./db.js";
-import { isValidTimezone, normalizeCurrency, nowIso } from "./utils.js";
+import { isValidTimezone, normalizeCurrency, normalizeStructuredLocation, nowIso } from "./utils.js";
 
 export const EXPORT_FORMAT = "yardsale-export";
 export const EXPORT_VERSION = 1;
@@ -213,6 +213,20 @@ function normalizeStore(store, current) {
   if (!store || typeof store !== "object") throw new Error("store.json is invalid.");
   const currency = normalizeCurrency(store.currency);
   if (!currency || !isValidTimezone(store.timezone)) throw new Error("store.json contains invalid currency or timezone settings.");
+  const locationSource = store.structuredLocation && typeof store.structuredLocation === "object" ? store.structuredLocation : {};
+  for (const [key, maxLength] of [["countryCode", 3], ["countryName", 100], ["region", 100], ["city", 100], ["area", 100], ["displayLocation", 200]]) {
+    if (locationSource[key] !== undefined && typeof locationSource[key] !== "string") throw new Error(`The export contains an invalid location ${key}.`);
+    if (typeof locationSource[key] === "string" && locationSource[key].length > maxLength) throw new Error(`The export contains an invalid location ${key}.`);
+  }
+  for (const [key, minimum, maximum] of [["latitude", -90, 90], ["longitude", -180, 180]]) {
+    if (locationSource[key] !== undefined && locationSource[key] !== null && (!Number.isFinite(locationSource[key]) || locationSource[key] < minimum || locationSource[key] > maximum)) {
+      throw new Error(`The export contains an invalid location ${key}.`);
+    }
+  }
+  const structuredLocation = normalizeStructuredLocation({
+    ...locationSource,
+    displayLocation: locationSource.displayLocation ?? store.location ?? ""
+  });
   const contactMethods = Array.isArray(store.contactMethods)
     ? store.contactMethods.map((method) => ({
       type: requiredString(method?.type ?? "", "contact method", 40),
@@ -223,7 +237,8 @@ function normalizeStore(store, current) {
   return {
     name: requiredString(store.name, "store name", 100),
     description: requiredString(store.description ?? "", "store description", 3000),
-    location: requiredString(store.location ?? "", "store location", 200),
+    location: requiredString(structuredLocation.displayLocation, "store location", 200),
+    structuredLocation,
     currency,
     timezone: store.timezone,
     holdDurationMinutes: integer(store.holdDurationMinutes, "hold duration", { min: 5 }),
@@ -410,6 +425,7 @@ export async function importStoreExport(db, dataDir, archive) {
       setSetting(db, "store.name", store.name);
       setSetting(db, "store.description", store.description);
       setSetting(db, "store.location", store.location);
+      setSetting(db, "store.location_structured", JSON.stringify(store.structuredLocation));
       setSetting(db, "store.currency", store.currency);
       setSetting(db, "store.timezone", store.timezone);
       setSetting(db, "store.hold_duration_minutes", store.holdDurationMinutes);

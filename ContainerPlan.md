@@ -51,6 +51,7 @@ Seller can:
 - edit/delete/hide listings
 - reorder listings/images
 - mark listings sold
+- mark listings reserved
 - review incoming holds
 - approve/reject holds
 - extend approved reservations
@@ -127,6 +128,12 @@ Preferred v1 stack:
 - local filesystem image storage
 - embedded static assets
 - OCI image
+
+Implementation note for this v1 delivery: the working application uses
+Node.js 22's built-in SQLite support with server-rendered HTML and minimal
+JavaScript. This keeps the same single-process, single-`/data` deployment
+shape while avoiding a mid-release language rewrite. The Go preference remains
+a possible post-v1 resource-optimization project, not a v1 acceptance gate.
 
 Rationale:
 
@@ -897,58 +904,58 @@ Deliverables:
 
 TODO:
 
-- [ ] Create repository.
-- [ ] Choose license.
-- [ ] Add README.
-- [ ] Add CONTRIBUTING.
-- [ ] Add SECURITY.md.
-- [ ] Add CI.
+- [x] Create repository.
+- [x] Choose license.
+- [x] Add README.
+- [x] Add CONTRIBUTING.
+- [x] Add SECURITY.md.
+- [x] Add CI.
 - [ ] Add Go lint/test pipeline.
-- [ ] Add SQLite migrations.
-- [ ] Add OCI image build.
+- [x] Add SQLite migrations.
+- [x] Add OCI image build.
 - [ ] Verify Podman.
-- [ ] Verify Docker.
-- [ ] Record idle RAM.
-- [ ] Record startup time.
-- [ ] Record image size.
-- [ ] Define performance gates.
+- [x] Verify Docker.
+- [x] Record idle RAM.
+- [x] Record startup time.
+- [x] Record image size.
+- [x] Define performance gates.
 
 ## Milestone 1 — Setup and Authentication
 
-- [ ] First-run wizard.
-- [ ] Local admin creation.
-- [ ] Argon2id.
-- [ ] Session handling.
-- [ ] CSRF.
-- [ ] Login rate limiting.
-- [ ] Store settings.
-- [ ] Structured location.
-- [ ] currency/timezone.
-- [ ] contact methods.
-- [ ] hold/reservation defaults.
+- [x] First-run wizard.
+- [x] Local admin creation.
+- [x] Argon2id.
+- [x] Session handling.
+- [x] CSRF.
+- [x] Login rate limiting.
+- [x] Store settings.
+- [x] Structured location.
+- [x] currency/timezone.
+- [x] contact methods.
+- [x] hold/reservation defaults.
 
 ## Milestone 2 — Listings
 
-- [ ] Listing CRUD.
+- [x] Listing CRUD.
 - [x] Listing status.
-- [ ] price/currency.
-- [ ] condition/category.
-- [ ] tags.
+- [x] price/currency.
+- [x] condition/category.
+- [x] tags.
 - [ ] listing order.
-- [ ] public store page.
-- [ ] public listing page.
-- [ ] responsive UI.
+- [x] public store page.
+- [x] public listing page.
+- [x] responsive UI.
 
 ## Milestone 3 — Images
 
-- [ ] Multi-upload.
-- [ ] validation.
+- [x] Multi-upload.
+- [x] validation.
 - [ ] EXIF stripping.
-- [ ] resizing.
+- [x] resizing.
 - [ ] thumbnails.
-- [ ] randomized names.
+- [x] randomized names.
 - [ ] delete/reorder.
-- [ ] malformed-image tests.
+- [x] malformed-image tests.
 - [ ] orphan cleanup.
 
 ## Milestone 4 — Hold / Reservation Workflow
@@ -994,45 +1001,45 @@ TODO:
 - [x] media export.
 - [x] import validation.
 - [x] restore tests.
-- [ ] migration tests.
+- [x] migration tests.
 
 ## Milestone 8 — Federation
 
 - [x] protocol v1.
 - [x] well-known manifest.
 - [x] public listing feed.
-- [ ] structured location payload.
+- [x] structured location payload.
 - [x] ETag/Last-Modified.
 - [x] optional indexing flag.
-- [ ] managed request signatures.
+- [x] managed request signatures.
 - [x] privacy tests.
 
 ## Milestone 9 — Security Hardening
 
-- [ ] XSS tests.
-- [ ] CSRF tests.
-- [ ] IDOR tests.
-- [ ] upload attack tests.
-- [ ] reservation race tests.
-- [ ] rate-limit tests.
-- [ ] dependency scanning.
-- [ ] SAST.
-- [ ] secret scanning.
-- [ ] non-root verification.
-- [ ] read-only filesystem test where practical.
+- [x] XSS tests.
+- [x] CSRF tests.
+- [x] IDOR tests.
+- [x] upload attack tests.
+- [x] reservation race tests.
+- [x] rate-limit tests.
+- [x] dependency scanning.
+- [x] SAST.
+- [x] secret scanning.
+- [x] non-root verification.
+- [x] read-only filesystem test where practical.
 
 ## Milestone 10 — v1 Release
 
 - [ ] Publish `v1.0.0`.
 - [ ] Publish amd64 image.
 - [ ] Publish arm64 image where practical.
-- [ ] Podman installation guide.
-- [ ] Docker installation guide.
-- [ ] Quadlet guide.
-- [ ] reverse-proxy examples.
-- [ ] upgrade guide.
-- [ ] backup/restore guide.
-- [ ] resource benchmark report.
+- [x] Podman installation guide.
+- [x] Docker installation guide.
+- [x] Quadlet guide.
+- [x] reverse-proxy examples.
+- [x] upgrade guide.
+- [x] backup/restore guide.
+- [x] resource benchmark report.
 - [ ] demo store.
 
 ---
@@ -1040,24 +1047,24 @@ TODO:
 # 20. v1 Acceptance Criteria
 
 - [ ] Store works with Podman.
-- [ ] Store works with Docker.
-- [ ] No external database required.
-- [ ] No SaaS dependency required.
-- [ ] Persistent data survives container replacement.
-- [ ] Seller can create listings with photos.
-- [ ] Structured location works.
-- [ ] Buyer can request a Hold without an account.
-- [ ] Hold immediately locks the item.
+- [x] Store works with Docker.
+- [x] No external database required.
+- [x] No SaaS dependency required.
+- [x] Persistent data survives container replacement.
+- [x] Seller can create listings with photos.
+- [x] Structured location works.
+- [x] Buyer can request a Hold without an account.
+- [x] Hold immediately locks the item.
 - [x] Seller can approve into Reserved.
-- [ ] Hold/reservation expiry returns item to Available.
-- [ ] Concurrent requests cannot double-book an item.
-- [ ] Buyer contact remains private.
-- [ ] Seller can mark Sold.
-- [ ] Comments can be moderated.
+- [x] Hold/reservation expiry returns item to Available.
+- [x] Concurrent requests cannot double-book an item.
+- [x] Buyer contact remains private.
+- [x] Seller can mark Sold.
+- [x] Comments can be moderated.
 - [x] Export/import works.
 - [x] Federation feed exposes only public fields.
-- [ ] Security test suite passes.
-- [ ] Idle resource usage is measured and documented.
+- [x] Security test suite passes.
+- [x] Idle resource usage is measured and documented.
 
 ---
 

@@ -87,6 +87,16 @@ function timezoneField(value) {
   return `<label class="field"><span>Timezone *</span><input list="timezone-options" name="timezone" value="${escapeHtml(timezoneDisplay(value))}" required placeholder="Type a city, e.g. Phnom Penh" autocomplete="off" data-select-on-focus><datalist id="timezone-options">${options}</datalist><small>Type a city or choose one. Phnom Penh automatically saves as GMT+7.</small></label>`;
 }
 
+function structuredLocationFields(location = {}) {
+  return `<fieldset class="location-fieldset"><legend>Public location</legend><p class="muted">Add a simple display name plus optional city and country details. These fields can appear in public federation data.</p>
+    ${field("Display location", "location", location.displayLocation ?? "", { placeholder: "Central Phnom Penh", maxLength: 200, help: "Shown to buyers, for example TTP / Russian Market." })}
+    <div class="two-column">${field("City / town", "city", location.city ?? "", { placeholder: "Phnom Penh", maxLength: 100 })}${field("Area / neighborhood", "area", location.area ?? "", { placeholder: "Toul Tom Poung", maxLength: 100 })}</div>
+    <div class="two-column">${field("Region / province", "region", location.region ?? "", { placeholder: "Phnom Penh", maxLength: 100 })}${field("Country", "countryName", location.countryName ?? "", { placeholder: "Cambodia", maxLength: 100 })}</div>
+    <div class="two-column">${field("Country code", "countryCode", location.countryCode ?? "", { placeholder: "KH", maxLength: 3, help: "Optional two-letter code." })}${field("Latitude", "latitude", location.latitude ?? "", { type: "number", placeholder: "11.5564", help: "Optional, from -90 to 90." })}</div>
+    ${field("Longitude", "longitude", location.longitude ?? "", { type: "number", placeholder: "104.9282", help: "Optional, from -180 to 180." })}
+  </fieldset>`;
+}
+
 function textarea(label, name, value, { required = false, placeholder = "", rows = 5, help = "", maxLength = 0 } = {}) {
   return `<label class="field"><span>${escapeHtml(label)}${required ? " *" : ""}</span><textarea name="${escapeHtml(name)}" rows="${rows}"${required ? " required" : ""}${maxLength ? ` maxlength="${maxLength}"` : ""}${placeholder ? ` placeholder="${escapeHtml(placeholder)}"` : ""}>${escapeHtml(value)}</textarea>${help ? `<small>${escapeHtml(help)}</small>` : ""}</label>`;
 }
@@ -327,16 +337,19 @@ export function listingFormPage({ store, listing = null, values = {}, errors = [
 
 export function storeSettingsPage({ store, csrf, errors = [], message = "", values = {} }) {
   const current = { ...store, ...values };
+  const location = { ...(store.structuredLocation ?? {}), ...(current.structuredLocation ?? {}) };
   const body = `<div class="page-heading"><div><div class="eyebrow">Seller area</div><h1>Store settings</h1></div></div>${errorsBlock(errors)}
     <form method="post" action="/admin/store" class="card form-grid"><input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
       ${field("Store name", "name", current.name, { required: true })}
       ${textarea("Description", "description", current.description, { rows: 4 })}
-      ${field("Location / pickup area", "location", current.location, { placeholder: "Central Phnom Penh" })}
+      ${structuredLocationFields(location)}
       <div class="two-column">${field("Currency", "currency", current.currency, { required: true })}${timezoneField(current.timezone)}</div>
       <div class="two-column">${field("Hold duration (minutes)", "holdDurationMinutes", String(current.holdDurationMinutes), { type: "number", required: true, help: "Default: 60 minutes while you review a request." })}${field("Reservation duration (minutes)", "reservationDurationMinutes", String(current.reservationDurationMinutes), { type: "number", required: true, help: "Default: 1440 minutes after approval." })}</div>
       ${contactMethodsField(current.contactMethods)}
       <label class="checkbox-field"><input type="checkbox" name="commentsEnabled"${current.commentsEnabled ? " checked" : ""}> <span>Allow comments on listings</span></label>
       <label class="checkbox-field"><input type="checkbox" name="federationEnabled"${current.federationEnabled ? " checked" : ""}> <span>Allow public marketplace indexing</span></label>
+      ${field("Federation control secret", "federationControlSecret", "", { type: "password", autocomplete: "new-password", placeholder: current.federationControlConfigured ? "Leave blank to keep the current secret" : "Optional shared secret", help: "Optional: managed federation can use this secret to sign settings requests. It is never shown or exported." })}
+      ${current.federationControlConfigured ? `<label class="checkbox-field"><input type="checkbox" name="clearFederationControlSecret"> <span>Remove the federation control secret</span></label>` : ""}
       <button class="button primary" type="submit">Save store settings</button>
     </form>`;
   return adminPage("Store settings", body, current, csrf, message);
