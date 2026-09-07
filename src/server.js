@@ -22,6 +22,7 @@ import {
   getUserByLogin,
   isSetupComplete,
   listListingImages,
+  listListingFilterOptions,
   listApprovedComments,
   listComments,
   listListings,
@@ -797,8 +798,33 @@ async function handlePublicHome(request, response, db, config, url) {
   const query = url.searchParams.get("q") || "";
   const status = url.searchParams.get("status") || "";
   const category = url.searchParams.get("category") || "";
-  const listings = listingsWithImages(db, listListings(db, { query, status, category }));
-  sendHtml(response, homePage({ store, listings, query, status, category }), 200, [], secureRequest(request, config));
+  const condition = url.searchParams.get("condition") || "";
+  const minPrice = url.searchParams.get("minPrice") || "";
+  const maxPrice = url.searchParams.get("maxPrice") || "";
+  const sort = url.searchParams.get("sort") || "default";
+  const filters = listListingFilterOptions(db);
+  const listings = listingsWithImages(db, listListings(db, {
+    query,
+    status,
+    category,
+    condition,
+    minPriceMinor: parseMoney(minPrice),
+    maxPriceMinor: parseMoney(maxPrice),
+    sort
+  }));
+  sendHtml(response, homePage({
+    store,
+    listings,
+    query,
+    status,
+    category,
+    condition,
+    minPrice,
+    maxPrice,
+    sort,
+    categories: filters.categories,
+    conditions: filters.conditions
+  }), 200, [], secureRequest(request, config));
 }
 
 async function handlePublicItem(request, response, db, config, slug, reserveRoute = false, commentRoute = false, url = null) {

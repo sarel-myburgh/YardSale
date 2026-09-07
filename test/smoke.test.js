@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { addListingImage, adminCommentAction, adminReservationAction, createComment, createListing, createSetup, expireReservations, getActiveReservationForListing, getListingById, getStore, isSetupComplete, listApprovedComments, listComments, listListingImages, openDatabase, reserveListing, setListingStatus, updateListing, updateStore } from "../src/db.js";
+import { addListingImage, adminCommentAction, adminReservationAction, createComment, createListing, createSetup, expireReservations, getActiveReservationForListing, getListingById, getStore, isSetupComplete, listApprovedComments, listComments, listListingFilterOptions, listListings, listListingImages, openDatabase, reserveListing, setListingStatus, updateListing, updateStore } from "../src/db.js";
 import { hashPassword, verifyPassword } from "../src/auth.js";
 import { createSlidingWindowLimiter, dateTimeLocalToIso, parseMoney, slugify, timezoneForInput } from "../src/utils.js";
 import { adminCommentsPage, adminListingsPage, dashboardPage, homePage, itemPage, listingFormPage, reservationPage, reservationsPage, storeSettingsPage } from "../src/html.js";
@@ -153,6 +153,78 @@ test("first-run setup creates a usable store and password hash", async () => {
     assert.equal(thirdHold.ok, true);
     assert.equal(adminReservationAction(db, thirdReservation.id, "approve", { reservationExpiresAt: explicitExpiry }), true);
     assert.equal(getActiveReservationForListing(db, thirdListing.id).reservation_expires_at, explicitExpiry);
+  } finally {
+    db.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("listing search supports full-text queries, filters, and sorting", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "yardsale-search-"));
+  const db = openDatabase(dataDir);
+
+  try {
+    const lamp = createListing(db, {
+      title: "Vintage Brass Lamp",
+      slug: "vintage-brass-lamp",
+      description: "Warm light for a reading corner.",
+      priceMinor: 2500,
+      currency: "USD",
+      category: "Home",
+      condition: "Good",
+      pickupNotes: "",
+      tags: "lighting, brass",
+      published: true,
+      quantity: 1
+    });
+    const bicycle = createListing(db, {
+      title: "City Bicycle",
+      slug: "city-bicycle",
+      description: "A reliable commuter bike.",
+      priceMinor: 10000,
+      currency: "USD",
+      category: "Sports",
+      condition: "Fair",
+      pickupNotes: "",
+      tags: "cycling",
+      published: true,
+      quantity: 1
+    });
+    createListing(db, {
+      title: "Private Brass Parts",
+      slug: "private-brass-parts",
+      description: "Not public.",
+      priceMinor: 1000,
+      currency: "USD",
+      category: "Home",
+      condition: "Used",
+      pickupNotes: "",
+      tags: "brass",
+      published: false,
+      quantity: 1
+    });
+
+    assert.deepEqual(listListings(db, { query: "brass lighting" }).map((item) => item.id), [lamp.id]);
+    assert.deepEqual(listListings(db, { condition: "fair" }).map((item) => item.id), [bicycle.id]);
+    assert.deepEqual(listListings(db, { minPriceMinor: 2000, maxPriceMinor: 3000 }).map((item) => item.id), [lamp.id]);
+    assert.deepEqual(listListings(db, { sort: "price-desc" }).map((item) => item.id), [bicycle.id, lamp.id]);
+    assert.deepEqual(listListingFilterOptions(db), { categories: ["Home", "Sports"], conditions: ["Fair", "Good"] });
+
+    updateListing(db, lamp.id, {
+      ...lamp,
+      title: "Updated Brass Lamp",
+      slug: lamp.slug,
+      priceMinor: lamp.price_minor,
+      currency: lamp.currency,
+      category: lamp.category,
+      condition: lamp.condition,
+      quantity: lamp.quantity,
+      pickupNotes: lamp.pickup_notes,
+      tags: lamp.tags,
+      published: true,
+      commentsEnabled: true
+    });
+    assert.equal(listListings(db, { query: "updated" }).length, 1);
   } finally {
     db.close();
     await rm(dataDir, { recursive: true, force: true });

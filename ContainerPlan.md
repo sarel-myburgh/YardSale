@@ -981,11 +981,11 @@ TODO:
 
 ## Milestone 6 — Search
 
-- [ ] SQLite FTS5.
-- [ ] title/description index.
-- [ ] tags/category.
-- [ ] filters.
-- [ ] sorting.
+- [x] SQLite FTS5.
+- [x] title/description index.
+- [x] tags/category.
+- [x] filters.
+- [x] sorting.
 
 ## Milestone 7 — Export / Import
 

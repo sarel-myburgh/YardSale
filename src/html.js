@@ -58,7 +58,7 @@ function layout({ title, body, storeName = "YardSale", admin = false, csrf = "" 
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>${escapeHtml(title)} · ${escapeHtml(storeName)}</title>
-    <link rel="stylesheet" href="/styles.css?v=5">
+    <link rel="stylesheet" href="/styles.css?v=6">
     <script src="/app.js?v=3" defer></script>
   </head>
   <body>
@@ -190,8 +190,22 @@ export function loginPage({ errors = [], login = "", next = "" } = {}) {
   return layout({ title: "Sign in", body });
 }
 
-export function homePage({ store, listings, query = "", status = "", category = "" }) {
-  const categories = [...new Set(listings.map((listing) => listing.category).filter(Boolean))].sort();
+export function homePage({
+  store,
+  listings,
+  query = "",
+  status = "",
+  category = "",
+  condition = "",
+  minPrice = "",
+  maxPrice = "",
+  sort = "default",
+  categories = [],
+  conditions = []
+}) {
+  const categoryOptions = categories.length ? categories : [...new Set(listings.map((listing) => listing.category).filter(Boolean))].sort();
+  const conditionOptions = conditions.length ? conditions : [...new Set(listings.map((listing) => listing.condition).filter(Boolean))].sort();
+  const sortValue = ["default", "newest", "price-asc", "price-desc"].includes(sort) ? sort : "default";
   const listingMarkup = listings.length
     ? `<div class="listing-grid">${listings.map((listing) => listingCard(listing, store)).join("")}</div>`
     : `<div class="empty-state"><h2>No items found</h2><p>Try a different search, or check back soon.</p></div>`;
@@ -205,8 +219,12 @@ export function homePage({ store, listings, query = "", status = "", category = 
   <form class="filters card" method="get" action="/">
     <label class="search-field"><span class="sr-only">Search listings</span><input type="search" name="q" value="${escapeHtml(query)}" placeholder="Search items"></label>
     <label><span class="sr-only">Availability</span><select name="status"><option value="">All availability</option><option value="available"${status === "available" ? " selected" : ""}>Available</option><option value="held"${status === "held" ? " selected" : ""}>Held</option><option value="reserved"${status === "reserved" ? " selected" : ""}>Reserved</option><option value="sold"${status === "sold" ? " selected" : ""}>Sold</option></select></label>
-    <label><span class="sr-only">Category</span><select name="category"><option value="">All categories</option>${categories.map((item) => `<option value="${escapeHtml(item)}"${category === item ? " selected" : ""}>${escapeHtml(item)}</option>`).join("")}</select></label>
-    <button class="button" type="submit">Search</button>
+    <label><span class="sr-only">Category</span><select name="category"><option value="">All categories</option>${categoryOptions.map((item) => `<option value="${escapeHtml(item)}"${category === item ? " selected" : ""}>${escapeHtml(item)}</option>`).join("")}</select></label>
+    <label><span class="sr-only">Condition</span><select name="condition"><option value="">All conditions</option>${conditionOptions.map((item) => `<option value="${escapeHtml(item)}"${condition === item ? " selected" : ""}>${escapeHtml(item)}</option>`).join("")}</select></label>
+    <label class="filter-price"><span class="sr-only">Minimum price</span><input type="number" name="minPrice" value="${escapeHtml(minPrice)}" min="0" step="0.01" placeholder="Min price"></label>
+    <label class="filter-price"><span class="sr-only">Maximum price</span><input type="number" name="maxPrice" value="${escapeHtml(maxPrice)}" min="0" step="0.01" placeholder="Max price"></label>
+    <label><span class="sr-only">Sort listings</span><select name="sort"><option value="default"${sortValue === "default" ? " selected" : ""}>Recommended</option><option value="newest"${sortValue === "newest" ? " selected" : ""}>Newest</option><option value="price-asc"${sortValue === "price-asc" ? " selected" : ""}>Price: low to high</option><option value="price-desc"${sortValue === "price-desc" ? " selected" : ""}>Price: high to low</option></select></label>
+    <div class="filter-actions"><button class="button" type="submit">Search</button>${query || status || category || condition || minPrice || maxPrice || sortValue !== "default" ? `<a class="button secondary" href="/">Clear</a>` : ""}</div>
   </form>
   ${listingMarkup}`;
   return layout({ title: "Storefront", body, storeName: store.name });

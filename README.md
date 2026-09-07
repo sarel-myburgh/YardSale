@@ -39,11 +39,12 @@ Local data is stored in `.yardsale/`.
 - Listing create, edit, hide/unhide, mark reserved, mark sold, and delete.
 - Multi-photo listing uploads with JPG, PNG, and WebP support, browser resizing, and bounded portrait/landscape galleries.
 - Public store and listing pages.
+- SQLite full-text listing search with status, category, condition, price, and sort filters.
 - Buyer hold requests with expiry and private management links.
 - Seller hold approval/rejection, optional reservation-until time, cancellation, extension, and completion.
 - Basic reservation abuse protection (per-IP and per-listing request windows).
 - Public comments with seller approval, hiding, deletion, plain-text escaping, and basic anti-spam protection.
 - Health endpoint and persistent Docker volume.
 
-Optional CAPTCHA, search indexing, import/export, federation, and image
-reordering are planned next from `ContainerPlan.md`.
+Optional CAPTCHA, import/export, federation, and image reordering remain
+planned from `ContainerPlan.md`.

@@ -193,11 +193,54 @@ function migrateLegacyTables(db) {
   }
 }
 
+function setupListingSearch(db) {
+  db.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS listing_search USING fts5(
+      title,
+      description,
+      category,
+      tags
+    );
+
+    CREATE TRIGGER IF NOT EXISTS listings_search_after_insert
+    AFTER INSERT ON listings
+    BEGIN
+      INSERT INTO listing_search (rowid, title, description, category, tags)
+      VALUES (new.id, new.title, new.description, new.category, new.tags);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS listings_search_after_update
+    AFTER UPDATE OF title, description, category, tags ON listings
+    BEGIN
+      DELETE FROM listing_search WHERE rowid = old.id;
+      INSERT INTO listing_search (rowid, title, description, category, tags)
+      VALUES (new.id, new.title, new.description, new.category, new.tags);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS listings_search_after_delete
+    AFTER DELETE ON listings
+    BEGIN
+      DELETE FROM listing_search WHERE rowid = old.id;
+    END;
+  `);
+
+  const listingCount = Number(db.prepare("SELECT COUNT(*) AS count FROM listings").get().count);
+  const searchCount = Number(db.prepare("SELECT COUNT(*) AS count FROM listing_search").get().count);
+  if (listingCount !== searchCount) {
+    db.exec("DELETE FROM listing_search");
+    db.exec(`
+      INSERT INTO listing_search (rowid, title, description, category, tags)
+      SELECT id, title, description, category, tags FROM listings
+    `);
+  }
+}
+
 export function openDatabase(dataDir) {
   mkdirSync(dataDir, { recursive: true });
   const db = new DatabaseSync(`${dataDir}/yardsale.db`);
   db.exec(schema);
   migrateLegacyTables(db);
+  setupListingSearch(db);
   db.exec(`
     CREATE INDEX IF NOT EXISTS listings_status_idx ON listings(status, published, sort_order);
     CREATE INDEX IF NOT EXISTS listing_images_listing_idx ON listing_images(listing_id, sort_order, id);
@@ -323,31 +366,74 @@ export function makeUniqueSlug(db, title, excludeId = null) {
   }
 }
 
-export function listListings(db, { admin = false, query = "", status = "", category = "" } = {}) {
+function ftsQuery(value) {
+  const tokens = String(value ?? "").normalize("NFKC").match(/[\p{L}\p{N}]+/gu) ?? [];
+  return tokens.map((token) => `"${token.replaceAll('"', '""')}"*`).join(" AND ");
+}
+
+export function listListingFilterOptions(db) {
+  const values = (column) => db.prepare(`
+    SELECT DISTINCT ${column} AS value
+    FROM listings
+    WHERE published = 1 AND status <> 'hidden' AND TRIM(${column}) <> ''
+    ORDER BY ${column} COLLATE NOCASE ASC
+  `).all().map((row) => row.value);
+
+  return { categories: values("category"), conditions: values("condition") };
+}
+
+export function listListings(db, {
+  admin = false,
+  query = "",
+  status = "",
+  category = "",
+  condition = "",
+  minPriceMinor = null,
+  maxPriceMinor = null,
+  sort = "default"
+} = {}) {
   const clauses = admin ? [] : ["published = 1", "status <> 'hidden'"];
   const params = [];
-  const search = String(query).trim();
+  const search = ftsQuery(query);
 
   if (search) {
-    clauses.push("(title LIKE ? OR description LIKE ? OR category LIKE ? OR tags LIKE ?)");
-    const term = `%${search}%`;
-    params.push(term, term, term, term);
+    clauses.push("listings.id IN (SELECT rowid FROM listing_search WHERE listing_search MATCH ?)");
+    params.push(search);
   }
   if (status && ["available", "held", "reserved", "sold", "hidden"].includes(status)) {
     clauses.push("status = ?");
     params.push(status);
   }
   if (category) {
-    clauses.push("category = ?");
+    clauses.push("category = ? COLLATE NOCASE");
     params.push(category);
+  }
+  if (condition) {
+    clauses.push("condition = ? COLLATE NOCASE");
+    params.push(condition);
+  }
+  if (Number.isSafeInteger(minPriceMinor) && minPriceMinor >= 0) {
+    clauses.push("price_minor >= ?");
+    params.push(minPriceMinor);
+  }
+  if (Number.isSafeInteger(maxPriceMinor) && maxPriceMinor >= 0) {
+    clauses.push("price_minor <= ?");
+    params.push(maxPriceMinor);
   }
 
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  const orderBy = sort === "newest"
+    ? "created_at DESC, id DESC"
+    : sort === "price-asc"
+      ? "price_minor ASC, created_at DESC, id DESC"
+      : sort === "price-desc"
+        ? "price_minor DESC, created_at DESC, id DESC"
+        : "CASE status WHEN 'available' THEN 0 WHEN 'held' THEN 1 WHEN 'reserved' THEN 2 WHEN 'sold' THEN 3 ELSE 4 END, sort_order ASC, created_at DESC, id DESC";
+
   return db.prepare(`
     SELECT * FROM listings
     ${where}
-      ORDER BY CASE status WHEN 'available' THEN 0 WHEN 'held' THEN 1 WHEN 'reserved' THEN 2 WHEN 'sold' THEN 3 ELSE 4 END,
-      sort_order ASC, created_at DESC
+      ORDER BY ${orderBy}
   `).all(...params);
 }
 
