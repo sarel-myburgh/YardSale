@@ -1,0 +1,15 @@
+{
+  "name": "yardsale-cloud",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "check": "node --check src/auth.js && node --check src/db.js && node --check src/policy.js && node --check src/runtime.js && node --check src/billing.js && node --check src/marketplace.js && node --check src/moderation.js && node --check src/ops.js && node --check src/html.js && node --check src/server.js",
+    "dev": "node --experimental-sqlite --watch src/server.js",
+    "start": "node --experimental-sqlite src/server.js",
+    "test": "node --experimental-sqlite --test"
+  }
+}

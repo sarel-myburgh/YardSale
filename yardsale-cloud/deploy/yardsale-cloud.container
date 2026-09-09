@@ -1,0 +1,23 @@
+[Unit]
+Description=YardSale Cloud control plane
+After=network-online.target
+
+[Container]
+Image=ghcr.io/example/yardsale-cloud:0.1.0
+ContainerName=yardsale-cloud
+PublishPort=127.0.0.1:3010:3010
+Volume=yardsale-cloud-data:/data:Z
+Environment=YARDSALE_CLOUD_DATA_DIR=/data
+Environment=YARDSALE_CLOUD_BASE_DOMAIN=yardsale.example
+Environment=YARDSALE_CLOUD_RUNTIME=local
+Environment=YARDSALE_CLOUD_RUNTIME_EXECUTE=false
+ReadOnly=true
+Tmpfs=/tmp
+NoNewPrivileges=true
+DropCapability=ALL
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

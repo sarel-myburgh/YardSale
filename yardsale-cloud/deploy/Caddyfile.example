@@ -1,0 +1,8 @@
+yardsale.example {
+    reverse_proxy 127.0.0.1:3010
+}
+
+# Store host routing is intentionally not enabled here. The control plane does
+# not yet proxy a store hostname to its tenant runtime port, so publishing a
+# wildcard would serve the control-plane UI for every seller hostname. Add a
+# tenant-aware gateway before enabling wildcard DNS.

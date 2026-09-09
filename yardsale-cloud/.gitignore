@@ -1,0 +1,4 @@
+.yardsale-cloud/
+*.db
+*.db-shm
+*.db-wal
